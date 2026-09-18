@@ -3,13 +3,16 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Gweru Stars Awards 2026 — Vote Now</title>
-  <meta name="description" content="Vote for Gweru's best across 51 awards — music, media, food, fashion, business, sports, community and the creative industry. Winners revealed 03 October 2026 at The Village Lodge." />
+  <!-- NOTE: voting is closed — these static tags are worded for the closed
+       ballot. If voting reopens (VOTING_CLOSED = false below), restore the
+       "Vote Now" wording here too. -->
+  <title>Gweru Stars Awards 2026 — Final Nominees</title>
+  <meta name="description" content="The final nominees for Gweru's best across 51 awards — music, media, food, fashion, business, sports, community and the creative industry. Public voting has closed. Winners revealed 03 October 2026 at The Village Lodge." />
   <meta name="theme-color" content="#0A0A0F" />
 
   <!-- Social sharing -->
-  <meta property="og:title" content="Gweru Stars Awards 2026 — Vote Now" />
-  <meta property="og:description" content="One vote per category. 51 awards. One night — 03 October 2026, The Village Lodge, Gweru." />
+  <meta property="og:title" content="Gweru Stars Awards 2026 — Final Nominees" />
+  <meta property="og:description" content="Voting has closed. 51 awards. One night — 03 October 2026, The Village Lodge, Gweru." />
   <meta property="og:type" content="website" />
   <meta name="twitter:card" content="summary_large_image" />
 
@@ -53,7 +56,7 @@
   <noscript>
     <div style="padding:2rem;text-align:center;font-family:system-ui">
       <h1>Gweru Stars Awards</h1>
-      <p>Voting requires JavaScript. Please enable it in your browser to see the categories and cast your vote.</p>
+      <p>This site requires JavaScript. Please enable it in your browser to see the categories and the final nominees.</p>
     </div>
   </noscript>
 
@@ -113,6 +116,13 @@ const EVENT = {
 /* Set to true only for local testing without real nominee data —
    shows a labelled sample pool instead of NOMINEES below. */
 const DEMO_MODE = false;
+
+/* Voting lock. true = the ballot is shut: nominees stay browsable, but no
+   new vote can be started and castVote() never writes to Firestore.
+   Set back to false to reopen voting.
+   NOTE: this is the UI lock. The hard lock is the Firestore security rule
+   on the `votes` collection — close that too so writes can't be forged. */
+const VOTING_CLOSED = true;
 
 const SECTIONS = [
   {
@@ -671,6 +681,11 @@ function getCategory(slug) {
      repeat vote from the same fingerprint (same doc ID) is rejected
      server-side as permission-denied, independent of local state. */
   async function castVote(categorySlug, nomineeId, nomineeName, categoryName, sectionName) {
+    if (VOTING_CLOSED) {
+      const err = new Error("voting-closed");
+      err.code = 423;
+      throw err;
+    }
     const fingerprint = getFingerprint();
     const voteId = `${categorySlug}__${fingerprint}`;
     try {
@@ -817,7 +832,7 @@ function getCategory(slug) {
           voted
             ? "border-gold/40 text-gold"
             : "border-gold/25 text-smoke group-hover:border-gold group-hover:text-gold"
-        }">${voted ? "Voted" : "Vote"}</span>
+        }">${voted ? "Voted" : VOTING_CLOSED ? "Nominees" : "Vote"}</span>
       </a>`;
   }
 
@@ -872,13 +887,21 @@ function getCategory(slug) {
         <div id="countdown" class="mt-8 flex items-end gap-3 sm:gap-5" aria-label="Countdown to awards night"></div>
 
         <div class="mt-10 flex flex-col items-center gap-3 sm:flex-row">
-          <a href="#programme" class="btn-gold">View categories &amp; vote</a>
-          <a href="#how" class="btn-ghost">How voting works</a>
+          <a href="#programme" class="btn-gold">${
+            VOTING_CLOSED ? "View the final nominees" : "View categories &amp; vote"
+          }</a>
+          <a href="#how" class="btn-ghost">${VOTING_CLOSED ? "What happens next" : "How voting works"}</a>
         </div>
 
-        <p class="mt-8 inline-flex items-center gap-2.5 font-body text-xs uppercase tracking-caps text-smoke">
-          <span class="live-dot" aria-hidden="true"></span> Voting is open — ${VOTABLE_COUNT} public-vote awards
-        </p>
+        ${
+          VOTING_CLOSED
+            ? `<p class="mt-8 font-body text-xs uppercase tracking-caps text-gold">
+                 ✦ Voting has closed — winners revealed on the night
+               </p>`
+            : `<p class="mt-8 inline-flex items-center gap-2.5 font-body text-xs uppercase tracking-caps text-smoke">
+                 <span class="live-dot" aria-hidden="true"></span> Voting is open — ${VOTABLE_COUNT} public-vote awards
+               </p>`
+        }
       </header>
 
       <!-- ═══ PROGRAMME ═══ -->
@@ -889,9 +912,15 @@ function getCategory(slug) {
             ${TOTAL_AWARDS} awards. Nine acts. One night.
           </h2>
           <p class="mx-auto mt-4 max-w-xl font-body text-sm leading-relaxed text-smoke">
-            Every award below except the honorary trophies is decided by the public —
-            by you. One vote per category. Your progress:
-            <span id="progress-count" class="text-gold">${votedCount()}</span> of ${VOTABLE_COUNT} categories voted.
+            ${
+              VOTING_CLOSED
+                ? `Public voting has closed and the ballots are sealed. Browse the final
+                   nominees below — winners are revealed at ${esc(EVENT.venue)} on ${esc(EVENT.dateLabel)}.
+                   You voted in <span id="progress-count" class="text-gold">${votedCount()}</span> of ${VOTABLE_COUNT} categories.`
+                : `Every award below except the honorary trophies is decided by the public —
+                   by you. One vote per category. Your progress:
+                   <span id="progress-count" class="text-gold">${votedCount()}</span> of ${VOTABLE_COUNT} categories voted.`
+            }
           </p>
         </div>
 
@@ -906,21 +935,32 @@ function getCategory(slug) {
       <!-- ═══ HOW IT WORKS ═══ -->
       <section id="how" class="border-t border-gold/15 bg-velvet/60 px-6 py-20 scroll-mt-16">
         <div class="mx-auto max-w-page">
-          <p class="eyebrow reveal">How voting works</p>
+          <p class="eyebrow reveal">${VOTING_CLOSED ? "What happens next" : "How voting works"}</p>
           <div class="mt-8 grid gap-10 sm:grid-cols-3">
             <div class="reveal">
               <p class="font-display text-3xl text-gold/50">1</p>
-              <h3 class="mt-2 font-display text-xl text-champagne">Pick a category</h3>
+              <h3 class="mt-2 font-display text-xl text-champagne">
+                ${VOTING_CLOSED ? "Voting has closed" : "Pick a category"}
+              </h3>
               <p class="mt-2 font-body text-sm leading-relaxed text-smoke">
-                Browse the programme above and open any category to see its nominees.
+                ${
+                  VOTING_CLOSED
+                    ? "The public ballot is shut and no further votes are being accepted. Thank you to everyone who voted."
+                    : "Browse the programme above and open any category to see its nominees."
+                }
               </p>
             </div>
             <div class="reveal">
               <p class="font-display text-3xl text-gold/50">2</p>
-              <h3 class="mt-2 font-display text-xl text-champagne">Cast one vote</h3>
+              <h3 class="mt-2 font-display text-xl text-champagne">
+                ${VOTING_CLOSED ? "Ballots are being counted" : "Cast one vote"}
+              </h3>
               <p class="mt-2 font-body text-sm leading-relaxed text-smoke">
-                Tap your choice. One vote per category — make it count. You can vote in
-                as many categories as you like.
+                ${
+                  VOTING_CLOSED
+                    ? "Every vote cast before the deadline is counted and sealed. The nominees above are final."
+                    : "Tap your choice. One vote per category — make it count. You can vote in as many categories as you like."
+                }
               </p>
             </div>
             <div class="reveal">
@@ -955,14 +995,14 @@ function getCategory(slug) {
 
   function nomineeCard(cat, nominee) {
     const votedFor = votes[cat.slug] === nominee.id;
-    const blocked = votes[cat.slug] && !votedFor;
+    const blocked = !VOTING_CLOSED && votes[cat.slug] && !votedFor;
     const state = votedFor ? "voted-for" : blocked ? "blocked" : "idle";
     return `
       <button type="button"
               class="nominee-card"
               data-state="${state}"
               data-nominee="${nominee.id}"
-              ${votes[cat.slug] ? "disabled" : ""}
+              ${VOTING_CLOSED || votes[cat.slug] ? "disabled" : ""}
               aria-pressed="${votedFor}">
         <span class="flex aspect-[4/3] w-full items-center justify-center bg-velvet2" aria-hidden="true">
           <svg class="h-16 w-16" style="opacity:.45" viewBox="0 0 64 64" fill="none">
@@ -996,11 +1036,15 @@ function getCategory(slug) {
           <h1 class="mt-3 font-display text-4xl text-champagne sm:text-5xl">${esc(cat.name)}</h1>
           <p id="cat-status" class="mt-4 font-body text-sm text-smoke">
             ${
-              voted
-                ? "Your vote in this category is in. Winners are announced on the night."
-                : hasNominees
-                  ? "Tap a nominee to cast your vote. One vote per category."
-                  : ""
+              VOTING_CLOSED
+                ? voted
+                  ? "Voting has closed. Your vote in this category was counted — winners are announced on the night."
+                  : "Voting has closed. These are the final nominees — winners are announced on the night."
+                : voted
+                  ? "Your vote in this category is in. Winners are announced on the night."
+                  : hasNominees
+                    ? "Tap a nominee to cast your vote. One vote per category."
+                    : ""
             }
           </p>
         </header>
@@ -1020,7 +1064,7 @@ function getCategory(slug) {
         }
 
         <div class="mt-14 text-center">
-          <a href="#/" class="btn-ghost">Vote in more categories</a>
+          <a href="#/" class="btn-ghost">${VOTING_CLOSED ? "Back to all categories" : "Vote in more categories"}</a>
         </div>
       </main>
       ${footer()}
@@ -1204,6 +1248,7 @@ function getCategory(slug) {
   /* ══════════════════════ VOTE HANDLING ══════════════════════ */
 
   function wireCategory(cat) {
+    if (VOTING_CLOSED) return;
     const grid = $("#nominee-grid");
     if (!grid) return;
     grid.addEventListener("click", async (e) => {
