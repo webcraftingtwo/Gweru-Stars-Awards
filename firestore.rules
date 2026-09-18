@@ -1,0 +1,86 @@
+rules_version = '2';
+
+/* ═══════════════════════════════════════════════════════════════════
+   GWERU STARS AWARDS — Firestore security rules
+   Project: gwerustars
+
+   These rules are the HARD lock on voting. The VOTING_CLOSED flag in
+   index.html only changes the UI; it runs on the visitor's device and
+   anyone can edit it in devtools. Only these rules can actually stop a
+   write reaching the database, because they run on Google's servers.
+
+   Deploy: Firebase console → Firestore Database → Rules → paste →
+   Publish. (Or `firebase deploy --only firestore:rules` if you use the
+   CLI.) Nothing takes effect until you Publish.
+   ═══════════════════════════════════════════════════════════════════ */
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /* ── Ballots ──────────────────────────────────────────────────
+       VOTING IS CLOSED. `create` is denied, so no new ballot can be
+       written by anyone, through the site or straight at the API.
+
+       To REOPEN voting you must change it in BOTH places:
+         1. here:           allow create: if isWellFormedVote();
+         2. index.html:     const VOTING_CLOSED = false;
+       Changing only index.html reopens the buttons but the server will
+       still reject every vote. Changing only this file leaves the site
+       telling people voting is closed while it quietly accepts votes.
+
+       update/delete stay denied permanently — that is what protects the
+       ballots already cast from being altered or wiped, and it is also
+       what enforced one-vote-per-device while voting was open (a repeat
+       vote reuses the same doc ID, so it lands as an update and fails).
+    ───────────────────────────────────────────────────────────────── */
+    match /votes/{voteId} {
+      allow create: if false;          // ← voting closed
+      allow update, delete: if false;  // ← never, closed or open
+
+      /* Reading the ballots = seeing the results. Signed-in admin only;
+         the public can never read this collection. */
+      allow read: if request.auth != null;
+
+      /* HARDENING (recommended): the line above trusts ANY signed-in
+         account. If email/password sign-up is enabled on this project,
+         a stranger could register and read the results. To pin it to
+         you alone, get your UID from Firebase console → Authentication →
+         Users, then swap the line above for:
+
+         allow read: if request.auth != null
+                     && request.auth.uid == 'PASTE_YOUR_ADMIN_UID_HERE';
+
+         Do that before you publish results anywhere. */
+    }
+
+    /* ── Everything else ──────────────────────────────────────────
+       Default deny. This project stores nothing else; if you add a
+       collection later it stays locked until you write a rule for it.
+    ───────────────────────────────────────────────────────────────── */
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
+/* ── The rule that was in force while voting was open ──────────────
+   Kept for reference so reopening is a copy-paste, not a rewrite.
+   Votes were written by unauthenticated visitors, so `create` could not
+   require auth; it validated the shape of the document instead.
+
+     function isWellFormedVote() {
+       return request.resource.data.keys().hasOnly([
+                'categorySlug', 'categoryName', 'sectionName',
+                'nomineeId', 'nomineeName', 'fingerprint', 'createdAt'
+              ])
+              && request.resource.data.categorySlug is string
+              && request.resource.data.nomineeId is string
+              && request.resource.data.fingerprint is string
+              && voteId == request.resource.data.categorySlug + '__'
+                           + request.resource.data.fingerprint;
+     }
+
+   The last clause is the important one: it forces the document ID to be
+   `categorySlug__fingerprint`, so a device cannot dodge the one-vote
+   limit by writing under a different ID.
+─────────────────────────────────────────────────────────────────── */
